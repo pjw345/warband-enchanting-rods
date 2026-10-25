@@ -51,7 +51,8 @@ if ($inventory.Count -ne $manifest.client_archives.Count) { throw 'Client archiv
 foreach ($entry in $manifest.client_archives) {
     if ([IO.Path]::GetFileName($entry.name) -ne $entry.name) { throw 'Invalid archive filename.' }
     $file = Get-Item -LiteralPath (Child-Path ('Data\' + $entry.name))
-    if ($file.Length -ne $entry.bytes -or $file.LastWriteTimeUtc.Ticks -ne [long]$entry.modified_ticks) { throw "Client archive changed: $($entry.name). Rebuild the patch." }
+    if ($file.Length -ne $entry.bytes -or !$entry.sha256) { throw "Client archive differs or has no content hash: $($entry.name). Rebuild the patch." }
+    Check-Hash $file.FullName $entry.sha256
 }
 Check-Hash (Child-Path ('Data\' + $manifest.spell_source)) $manifest.source_archive_sha256
 Check-Hash (Join-Path $PSScriptRoot 'Data\patch-Z.MPQ') $manifest.mpq_sha256

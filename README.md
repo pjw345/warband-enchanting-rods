@@ -1,82 +1,81 @@
-# Turtle enchanting rod client compatibility patch
+# Warband Enchanting Rods
 
-Source tooling for issue #67. This creates a client-specific candidate, not a
-replacement WoW client. It requires the corresponding higher-rod tool validation
-on the private server. The generated
-game data and archives stay outside Git.
+Use a higher-tier runed enchanting rod for recipes requiring a lower-tier rod
+on a compatible Turtle private server. This repository contains the companion
+addon, client patch builder, installer, rollback and tests.
 
-## Design and compatibility
+**[Download the installation ZIP from Releases](https://github.com/pjw345/warband-enchanting-rods/releases/latest)**.
+Choose `WarbandEnchantingRods-1.0.0.zip`, not GitHub's automatically generated
+source ZIP: the installation package includes the matching MPQ and generated
+recipe data.
 
-Wrath 3.3.5 implements tool categories and masks. The current Turtle client uses
-the older 173-field Spell.dbc format and has no such category fields. Copying
-Wrath's 234-field file or adding unsupported fields would be incompatible.
+## Requirements
 
-The builder reads the exact client's MPQ overlay and Enchanting skill-line
-associations. It clears only the two client exact-item tool fields when they
-name one of the five server-supported runed rods. All other fields, spells,
-strings, native formats, consumed reagents/counts, non-rod tools, skill and
-target requirements remain unchanged. The existing server HasRequiredTool
-hierarchy remains authoritative. No executable, DLL, native crafting API,
-server data or original client archive is modified.
+- A server with the higher-rod validation from
+  [tortoise-wow PR #68](https://github.com/pjw345/tortoise-wow/pull/68), commit
+  `2721b1957f80bd13146e1ffc11b4a0eea4d15bd1`, or an equivalent implementation.
+- The matching Vanilla/Turtle client data described in the release manifest.
+  This patch uses the 173-field `Spell.dbc` layout and is not a WoW 3.3.5a patch.
+- Windows PowerShell for the provided installer. End users do not need Python,
+  Lua or StormLib to install the prepared release.
 
-The companion Warband Enchanting Rods addon restores the recipe's rod display
-as "Runed Copper Rod (or higher)", checks carried bags before DoCraft, and
-then delegates to the original native function with its original arguments.
-It preserves other tool requirements and ordinary craft calls. Rods in bank
-bags do not count. If native exact-rod focus still appears, the addon leaves
-the original UI/crafting behavior intact, rather than advertising an active
-patch. `/werods` reports the selected recipe's patch status.
+The server change and this client package are both required. Installing only the
+addon cannot remove the client's exact-item cast rejection. The server continues
+to validate the actual rod, skill, target and consumed reagents.
 
-The MPQ is required for client cast initiation; the addon provides the display
-and local precheck. Without the addon, server validation still rejects missing
-or insufficient rods, but the client no longer displays those tool requirements.
-Direct spell casting continues through normal server checks. The addon never
-replaces target selection or non-traded trade-slot handling.
+## Install
 
-## Build
+1. Extract the release ZIP outside the client folder and close WoW completely.
+2. Open PowerShell in the extracted `WarbandEnchantingRods-1.0.0` folder and run,
+   substituting your actual client path:
 
-Requires Python with mpyq and the official StormLib native library. This candidate
-uses StormLib v9.25, commit 28c9b4be3f23c6b3a5ff55cacac7dbe5b9cdc4fc.
+   ```powershell
+   .\Install.ps1 -ClientPath 'C:\Games\TurtleWoW'
+   ```
 
-```text
-python build_patch.py --client "D:/TurtleWoW Client with Addons" --output OUTSIDE_CLIENT
-python pack_mpq.py --stormlib /path/to/libstorm.so --candidate OUTSIDE_CLIENT
-```
+3. Start WoW and enable **Warband Enchanting Rods** on the AddOns screen.
+4. Open Enchanting, select a recipe and run `/werods` to check patch status.
 
-The output path must not exist and must be outside the installed client. The
-builder validates the field layouts and Minor Striking contract, rejects
-ambiguous names, and audits every output row. Header, string-table and all
-non-rod-field bytes must remain identical. The packager creates a classic MPQ
-with zlib compression and verifies the extracted file using StormLib itself.
+The installer checks file content, not machine-specific paths or timestamps.
+It deliberately rejects different client files, additional MPQs and existing
+destinations. A different client needs a separately generated package; do not
+bypass these checks. The initial identity check hashes the original client
+archives, which can take a few minutes.
 
-## Tests
+**[Installation, removal and client updates](docs/INSTALL.md)**
 
-```text
-python -m unittest discover -s . -p test_patch.py -v
-lua50 test_rods.lua .
-```
+## What is included
 
-Python fixtures cover consumed reagents, unrelated tools/spells, multiple tools,
-bad layouts/truncation/duplicate IDs and name/rank ambiguity. Lua 5.0 exercises
-all 25 rod-tier combinations, missing/bank-only tools, native argument/return
-forwarding, other crafting, tool display and unpatched-client fallback.
+- `patch-Z.MPQ`: an override changing only supported runed-rod tool fields in
+  the matching client's spell data.
+- `WarbandEnchantingRods`: restores “Runed Copper Rod (or higher)” style
+  requirements, checks carried bags and delegates crafting to the native API.
+- `Install.ps1` and `manifest.json`: content checks and reversible removal.
 
-## Candidate status and acceptance
+The accepted payload preserves all 27,916 spell rows, strings and unrelated
+fields. It changes 344 bytes across 172 Enchanting recipes. Consumed reagents
+are unchanged. Original MPQs, executables and DLLs are not overwritten.
 
-The generated candidate is based on the user's current patch-9.mpq Spell.dbc
-and SkillLineAbility.dbc. It preserves 27916 spell rows and changes 172
-Enchanting recipes, with 344 differing bytes. Original Spell.dbc SHA-256:
-fbc0a5a2e51ffe1110d0d85e9a1f885a68c4b3b2695b7e83bfc26c478af3ff6a.
+## Validation
 
-Offline checks do not establish client startup, MPQ precedence or successful
-enchanting. Test a separate compatible client copy before adopting it. Keep
-issue #67 open until startup, all tier directions, no/bank-only rod rejection,
-normal and trade enchants, reagent consumption and removal are verified live.
+On 25 October 2026, the installed patch and addon were confirmed working in
+normal play for the reported Silver Rod / lower-tier enchant case. This does
+not claim live coverage of every tier, trade enchanting or every negative case.
 
-The release includes a hash-checking Install.ps1, a manifest and installation
-instructions. It refuses a running target client, existing destinations, changed
-client archives and mismatched payloads. Removal moves only matching patch/addon
-files into that client's Archive directory. Original MPQs remain untouched.
+Python fixture tests cover byte preservation, unrelated tools, consumed reagents,
+invalid data and generated recipe aliases. Lua 5.0 tests cover all 25 rod-tier
+combinations, carried/bank-only/missing rods, native forwarding and original
+client fallback. Installer fixtures cover copies with different timestamps,
+same-size content changes, installation, rollback and existing/modified files.
 
-After any client update, remove this patch and regenerate it from the new client
-before reusing it: a complete Spell.dbc override otherwise masks newer spell data.
+## Build and contribute
+
+See **[BUILD.md](docs/BUILD.md)** for tooling, dependencies and tests.
+Generated game data and MPQs are release assets, not tracked source files.
+
+The source was extracted with its three original commits from
+`tools/client-enchanting-rods/` in
+[tortoise-wow PR #80](https://github.com/pjw345/tortoise-wow/pull/80).
+See [SOURCE.md](SOURCE.md) for provenance and the retained AGPL-3.0 license.
+Server behavior remains tracked in
+[tortoise-wow issue #67](https://github.com/pjw345/tortoise-wow/issues/67).

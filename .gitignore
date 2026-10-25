@@ -5,3 +5,5 @@ __pycache__/
 *.dbc
 manifest.json
 WarbandEnchantingRods/Recipes.lua
+*.zip
+dist/

@@ -1,0 +1,36 @@
+name: Client tooling tests
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  data-and-addon:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test spell data preservation
+        run: python -m unittest discover -s . -p test_patch.py -v
+      - name: Build the actual client Lua runtime
+        run: |
+          curl --fail --location --retry 3 https://www.lua.org/ftp/lua-5.0.3.tar.gz -o "$RUNNER_TEMP/lua-5.0.3.tar.gz"
+          echo "1193a61b0e08acaa6eee0eecf29709179ee49c71baebc59b682a25c3b5a45671  $RUNNER_TEMP/lua-5.0.3.tar.gz" | sha256sum --check
+          tar -xzf "$RUNNER_TEMP/lua-5.0.3.tar.gz" -C "$RUNNER_TEMP"
+          make -C "$RUNNER_TEMP/lua-5.0.3" MYCFLAGS=-fcommon
+      - name: Test native addon forwarding and rod hierarchy
+        run: '"$RUNNER_TEMP/lua-5.0.3/bin/lua" test_rods.lua .'
+  installer:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Create synthetic payload without game files
+        run: python tests/make_installer_fixture.py "$env:RUNNER_TEMP/rod-fixture"
+      - name: Test installation, removal and compatibility checks
+        shell: powershell
+        run: .\test_installer.ps1 -Candidate "$env:RUNNER_TEMP/rod-fixture"

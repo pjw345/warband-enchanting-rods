@@ -8,11 +8,18 @@ SKILL_PATH = r'DBFilesClient\SkillLineAbility.dbc'
 
 def sha(data): return hashlib.sha256(data).hexdigest()
 
+def file_sha(path):
+    digest = hashlib.sha256()
+    with pathlib.Path(path).open('rb') as stream:
+        for chunk in iter(lambda: stream.read(4 * 1024 * 1024), b''):
+            digest.update(chunk)
+    return digest.hexdigest()
+
 def client_identity(client, source):
     archives = sorted([p for p in (client/'Data').iterdir() if p.suffix.lower()=='.mpq'],key=lambda p:p.name.lower())
-    return {'client_exe_sha256': sha((client/'WoW.exe').read_bytes()),
-            'source_archive_sha256': sha((client/'Data'/source).read_bytes()),
-            'client_archives': [{'name':p.name,'bytes':p.stat().st_size,'modified_ticks':p.stat().st_mtime_ns//100+621355968000000000} for p in archives]}
+    return {'client_exe_sha256': file_sha(client/'WoW.exe'),
+            'source_archive_sha256': file_sha(client/'Data'/source),
+            'client_archives': [{'name':p.name,'bytes':p.stat().st_size,'sha256':file_sha(p)} for p in archives]}
 
 def dbc(data, expected_fields):
     if len(data) < 20: raise ValueError('Truncated DBC')

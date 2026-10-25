@@ -23,7 +23,7 @@ function New-Case([string]$Name) {
     $manifest.spell_source = 'fixture.MPQ'
     $manifest.source_archive_sha256 = (Get-FileHash -LiteralPath (Join-Path $client 'Data\fixture.MPQ')).Hash
     $file = Get-Item -LiteralPath (Join-Path $client 'Data\fixture.MPQ')
-    $manifest.client_archives = @([pscustomobject]@{name='fixture.MPQ';bytes=$file.Length;modified_ticks=$file.LastWriteTimeUtc.Ticks})
+    $manifest.client_archives = @([pscustomobject]@{name='fixture.MPQ';bytes=$file.Length;sha256=$manifest.source_archive_sha256})
     $manifest | ConvertTo-Json -Depth 20 | Set-Content -LiteralPath (Join-Path $payload 'manifest.json') -Encoding utf8
     return $client
 }
@@ -41,6 +41,8 @@ Check (!(Test-Path -LiteralPath (Join-Path $client 'Data\patch-Z.MPQ'))) 'Runnin
 $TestRodProcesses = @()
 $client = New-Case 'successful-install-remove'
 $before = (Get-FileHash -LiteralPath (Join-Path $client 'Data\fixture.MPQ')).Hash
+# Copies with identical content must work regardless of local timestamps.
+(Get-Item -LiteralPath (Join-Path $client 'Data\fixture.MPQ')).LastWriteTimeUtc = [datetime]'2001-01-01'
 & $installer -ClientPath $client | Out-Null
 Check (Test-Path -LiteralPath (Join-Path $client 'Data\patch-Z.MPQ')) 'Install failed'
 & $installer -ClientPath $client -Remove | Out-Null
@@ -52,6 +54,15 @@ $client = New-Case 'stale-client'
 Add-Content -LiteralPath (Join-Path $client 'Data\fixture.MPQ') -Value 'new client version'
 Reject { & $installer -ClientPath $client } 'Stale archive accepted'
 Check (!(Test-Path -LiteralPath (Join-Path $client 'Interface\AddOns\WarbandEnchantingRods'))) 'Stale client was mutated'
+$client = New-Case 'same-size-changed-archive'
+$archive = Join-Path $client 'Data\fixture.MPQ'
+$savedTime = (Get-Item -LiteralPath $archive).LastWriteTimeUtc
+$bytes = [IO.File]::ReadAllBytes($archive)
+$bytes[0] = $bytes[0] -bxor 1
+[IO.File]::WriteAllBytes($archive,$bytes)
+(Get-Item -LiteralPath $archive).LastWriteTimeUtc = $savedTime
+Reject { & $installer -ClientPath $client } 'Same-size changed archive accepted'
+Check (!(Test-Path -LiteralPath (Join-Path $client 'Data\patch-Z.MPQ'))) 'Changed archive was mutated'
 $client = New-Case 'existing-patch'
 [IO.File]::WriteAllText((Join-Path $client 'Data\patch-Z.MPQ'),'existing user patch')
 Reject { & $installer -ClientPath $client } 'Existing destination accepted'
@@ -61,4 +72,4 @@ $client = New-Case 'modified-addon'
 Add-Content -LiteralPath (Join-Path $client 'Interface\AddOns\WarbandEnchantingRods\WarbandEnchantingRods.lua') -Value '-- user change'
 Reject { & $installer -ClientPath $client -Remove } 'Modified addon removed'
 Check (Test-Path -LiteralPath (Join-Path $client 'Data\patch-Z.MPQ')) 'Partial removal after mismatch'
-Write-Output "PASS: install/remove, retained originals/rollback, stale client, existing patch and modified addon. Fixtures: $testRoot"
+Write-Output "PASS: install/remove, retained originals/rollback, timestamp-independent copies, same-size content changes, stale client, existing patch and modified addon. Fixtures: $testRoot"
